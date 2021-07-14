@@ -22,6 +22,11 @@ def fname_format(snapshot):
 class header:
     def __init__(self, snapshot):
 
+        # default Gadget-2 unit system
+        _Mpc_cgs_       = 3.085678e+024 # 1 Mpc in cm
+        _1e10_Msol_cgs_ = 1.989000e+043 # 10^10 Msol in grams
+        _km_s_cgs_      = 1.000000e+005 # 1 km/s in cm/s
+
         filename, fformat = fname_format(snapshot)
 
         if fformat=='hdf5':
@@ -41,6 +46,12 @@ class header:
                     raise Exception('Not cubic box dimensions')
                 else:
                     self.boxsize = self.boxsize[0]
+
+            # what code produced this snapshot?
+            if 'Code' in f['Header'].attrs.keys():
+                code = f['Header'].attrs['Code'].decode()
+            else:
+                code = 'GADGET'
 
             # check if it is a SWIFT snapshot
             if '/Cosmology' in f.keys():
@@ -62,6 +73,30 @@ class header:
                 self.hubble   = f['Header'].attrs[u'HubbleParam']
                 #self.cooling  = f['Header'].attrs[u'Flag_Cooling']
 
+            # handle different unit systems
+            if '/Units' in f.keys():
+                length_cgs = f["Units"].attrs["Unit length in cgs (U_L)"]
+                time_cgs = f["Units"].attrs["Unit time in cgs (U_t)"]
+                mass_cgs = f["Units"].attrs["Unit mass in cgs (U_M)"]
+
+                # convert to default unit system
+                self.unit_length_Mpc_h = length_cgs / _Mpc_cgs_
+                self.unit_velocity_km_s = (length_cgs / time_cgs) / _km_s_cgs_
+                self.unit_mass_1e10_Msol_h = mass_cgs / _1e10_Msol_cgs_
+
+                # do we need to convert to Hubble units (e.g Mpc to Mpc/h)?
+                if code=="SWIFT":
+                    self.unit_length_Mpc_h *= self.hubble
+                    self.unit_mass_1e10_Msol_h *= self.hubble
+            else:
+                self.unit_length_Mpc_h = 1.0
+                self.unit_velocity_km_s = 1.0
+                self.unit_mass_1e10_Msol_h = 1.0
+
+            # unit conversions of attributes (TODO: self.time)
+            self.boxsize /= self.unit_length_Mpc_h
+            self.massarr /= self.unit_mass_1e10_Msol_h
+
             self.format   = 'hdf5'
             f.close()
 
@@ -79,6 +114,11 @@ class header:
             self.nall     = head.nall
             self.cooling  = head.cooling
             self.format   = head.format
+
+            # default unit system
+            self.unit_length_Mpc_h = 1.0
+            self.unit_velocity_km_s = 1.0
+            self.unit_mass_1e10_Msol_h = 1.0
 
         # km/s/(Mpc/h)
         self.Hubble = 100.0*np.sqrt(self.omega_m*(1.0+self.redshift)**3+self.omega_l)
@@ -116,6 +156,19 @@ def read_field(snapshot, block, ptype):
         if block=="VEL ":  array *= np.sqrt(head.time)
         if block=="POS " and array.dtype==np.float64:
             array = array.astype(np.float32)
+
+        # check if we need to do a unit conversion
+        if block=="POS ":
+            unit_factor = head.unit_length_Mpc_h
+        elif block=="VEL ":
+            unit_factor = head.unit_velocity_km_s
+        elif block=="MASS":
+            unit_factor = head.unit_mass_1e10_Msol_h
+        else:
+            unit_factor = 1.0
+
+        if not unit_factor==1.0:
+            array *= unit_factor
 
         return array
 
