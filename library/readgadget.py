@@ -35,6 +35,13 @@ class header:
             self.massarr  = f['Header'].attrs[u'MassTable']
             self.boxsize  = f['Header'].attrs[u'BoxSize']
 
+            # handle cases where the BoxSize is an array
+            if not np.isscalar(self.boxsize):
+                if not np.all(self.boxsize == self.boxsize[0]):
+                    raise Exception('Not cubic box dimensions')
+                else:
+                    self.boxsize = self.boxsize[0]
+
             # check if it is a SWIFT snapshot
             if '/Cosmology' in f.keys():
                 self.omega_m  = f['Cosmology'].attrs[u'Omega_m']
