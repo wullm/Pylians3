@@ -94,8 +94,8 @@ class header:
                 self.unit_mass_1e10_Msol_h = 1.0
 
             # unit conversions of attributes (TODO: self.time)
-            self.boxsize /= self.unit_length_Mpc_h
-            self.massarr /= self.unit_mass_1e10_Msol_h
+            self.boxsize *= self.unit_length_Mpc_h
+            self.massarr *= self.unit_mass_1e10_Msol_h
 
             self.format   = 'hdf5'
             f.close()
